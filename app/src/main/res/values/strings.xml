@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">BrokenEgg Transformer</string>
+    <string-array name="language_names">
+        <item>English</item>
+        <item>Spanish</item>
+        <item>Japanese</item>
+        <item>Conversation</item>
+    </string-array>
 </resources>

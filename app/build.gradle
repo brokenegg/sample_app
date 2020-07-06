@@ -40,6 +40,9 @@ android {
     }
 }
 
+// Download TF Lite model.
+apply from: 'download.gradle'
+
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"

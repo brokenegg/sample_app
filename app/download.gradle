@@ -3,7 +3,6 @@ apply plugin: 'de.undercouch.download'
 task downloadLiteModel {
     def downloadFiles = [
             'https://github.com/brokenegg/sample_app/releases/download/v0.1/brokenegg.en-es-ja.spm64k.model': 'brokenegg.en-es-ja.spm64k.model',
-            'https://github.com/brokenegg/sample_app/releases/download/v0.1/brokenegg_tf22.tflite': 'brokenegg_tf22.tflite',
     ]
     downloadFiles.each { key, value ->
         download {

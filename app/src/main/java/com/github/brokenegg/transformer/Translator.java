@@ -5,7 +5,10 @@ import android.content.res.AssetManager;
 import android.util.Log;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 class Translator {
     static {
@@ -14,8 +17,9 @@ class Translator {
 
     private static final String LOG_TAG = "translator";
 
-    private static final String MODEL_PATH = "brokenegg_tf22.tflite";
-    private static final boolean useDynamicShape = false;
+    private static final String ONNX_MODEL_PATH = "brokenegg-20200711_torch.onnx";
+    private static final String SPM_MODEL_PATH = "brokenegg.en-es-ja.spm64k.model";
+
     private static final long EOS_ID = 2;
     public static final long LANG_CHITCHAT = 1;
     public static final long LANG_ENGLISH = 64000;
@@ -25,34 +29,32 @@ class Translator {
     public Translator(Activity activity) {
         AssetManager assetManager = activity.getAssets();
         try {
-            File path = activity.getExternalFilesDir(null);
-            byte[] dat = null; //loadModelAsBytes(assetManager, "brokenegg-20200711_torch.onnx", 350000000);
-            initModel(dat, 0); //dat.length);
+            File externalFilesDir = activity.getExternalFilesDir(null);
+            Path onnxModelPath = Paths.get(externalFilesDir.toString(), ONNX_MODEL_PATH);
+            loadOnnxModel(onnxModelPath.toString());
 
-            dat = loadModelAsBytes(assetManager, "brokenegg.en-es-ja.spm64k.model", 1400000);
-            initTokenizer(dat, dat.length);
+            byte[] dat = loadModelAsBytes(assetManager, SPM_MODEL_PATH, 1400000);
+            loadSentencePiece(dat, dat.length);
         } catch (Exception ex) {
             Log.d(LOG_TAG, "Exception %s", ex);
         }
     }
 
-    private byte[] loadModelAsBytes(AssetManager assetManager, String fileName, int maxSize) {
+    private byte[] loadModelAsBytes(AssetManager assetManager, String fileName, int maxSize) throws IOException {
+        InputStream inputStream = assetManager.open(fileName);
         try {
-            InputStream inputStream = assetManager.open(fileName);
             byte[] buf = new byte[maxSize];
             int len = inputStream.read(buf, 0, buf.length);
             byte[] res = new byte[len];
             System.arraycopy(buf, 0, res, 0, len);
-            inputStream.close();
             return res;
-        } catch (Exception ex) {
-
+        } finally {
+            inputStream.close();
         }
-        return null;
     }
 
-    private native boolean initModel(byte[] buf, int len);
-    private native boolean initTokenizer(byte[] buf, int len);
+    private native boolean loadOnnxModel(String modelPath);
+    private native boolean loadSentencePiece(byte[] buf, int len);
     private native String translate(String text, long initialToken);
 
     private long[] padData(long[] ids, int size) {

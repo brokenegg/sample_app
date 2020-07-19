@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.4.1)
 
-add_library(tokenize
+add_library(translator
             SHARED
-            tokenize.cpp
+            translator.cpp
         )
 
-target_link_libraries(tokenize
-        ${CMAKE_SOURCE_DIR}/libsentencepiece.a
-      android
-      log)
+include_directories(${CMAKE_SOURCE_DIR}/inc)
+
+target_link_libraries(translator
+    ${CMAKE_SOURCE_DIR}/libsentencepiece.a
+    ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libonnxruntime.so
+    android
+    log)

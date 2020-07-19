@@ -1,2 +1,2 @@
 include ':app'
-rootProject.name = "BrokenEgg Transformer"
+rootProject.name = "sample_app"

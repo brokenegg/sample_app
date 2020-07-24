@@ -46,7 +46,9 @@ public:
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Loaded");
     }
 
-    void Translate(const std::string& input_text, int64_t initial_token, std::string* output_text) {
+    void Translate(const std::string& input_text,
+            int64_t initial_token, int model_version,
+            std::string* output_text) {
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Encoding");
         std::vector<int> input_ids;
         auto status = processor_.Encode(input_text, &input_ids);
@@ -63,18 +65,26 @@ public:
 
         std::vector<int64_t> output_long_ids;
 
-        for (size_t i = 1; i <= 20; i++) {
-            __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Predicting token %ld", i);
-            output_long_ids.resize(i);
-            TranslateStep(input_long_ids, target_long_ids, output_long_ids);
-            int64_t lastId = output_long_ids[i - 1];
-            __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Last ID: %ld", lastId);
-            if (lastId == EOS_ID) {
+        switch (model_version) {
+            case 1:
+                for (size_t i = 1; i <= 20; i++) {
+                    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Predicting token %ld", i);
+                    TranslateStep(input_long_ids, target_long_ids, output_long_ids);
+                    int64_t lastId = output_long_ids[i - 1];
+                    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Last ID: %ld", lastId);
+                    if (lastId == EOS_ID) {
+                        break;
+                    }
+                    target_long_ids.push_back(lastId);
+                }
                 break;
-            }
-            target_long_ids.push_back(lastId);
+            case 2:
+                TranslateStep(input_long_ids, target_long_ids, output_long_ids);
+                output_long_ids.erase(output_long_ids.begin());
+                break;
+            default:
+                throw std::exception();
         }
-
         std::vector<int> output_ids(output_long_ids.cbegin(), output_long_ids.cend());
 
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Decoding");
@@ -83,16 +93,38 @@ public:
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Decoded");
     }
 
+    void Translate2(const std::string& input_text, int64_t initial_token, std::string* output_text) {
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Encoding");
+        std::vector<int> input_ids;
+        auto status = processor_.Encode(input_text, &input_ids);
+        if (!status.ok()) throw std::exception();
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Encoded");
+        input_ids.push_back(EOS_ID);
+
+        std::vector<int64_t> input_long_ids(input_ids.cbegin(), input_ids.cend());
+
+        std::vector<int64_t> target_long_ids;
+        target_long_ids.push_back(initial_token);
+
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Initial %d", (int)initial_token);
+
+        std::vector<int64_t> output_long_ids;
+
+        std::vector<int> output_ids(output_long_ids.cbegin(), output_long_ids.cend());
+
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Decoding");
+        status = processor_.Decode(output_ids, output_text);
+        if (!status.ok()) throw std::exception();
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Decoded");
+    }
 private:
     void TranslateStep(std::vector<int64_t>& inputs, std::vector<int64_t>& targets, std::vector<int64_t>& outputs) {
         DumpVec(inputs, "inputs");
         DumpVec(targets, "targets");
-        DumpVec(outputs, "outputs");
 
         // Define tensor shapes
         std::array<int64_t, 2> inputs_shape{1, static_cast<int64_t>(inputs.size())};
         std::array<int64_t, 2> targets_shape{1, static_cast<int64_t>(targets.size())};
-        std::array<int64_t, 2> outputs_shape{1, static_cast<int64_t>(targets.size())};
 
         auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
 
@@ -104,20 +136,23 @@ private:
                         memory_info, targets.data(), targets.size(),
                         targets_shape.data(), targets_shape.size())
         };
-        std::array<Ort::Value, 1> output_tensors{
-                Ort::Value::CreateTensor<int64_t>(
-                        memory_info, outputs.data(), outputs.size(),
-                        outputs_shape.data(), outputs_shape.size())
-        };
 
         const char* input_names[] = {"inputs", "targets"};
         const char* output_names[] = {"outputs"};
 
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Start inference");
-        session_.Run(Ort::RunOptions{nullptr},
+        std::vector<Ort::Value> output_tensors = session_.Run(Ort::RunOptions{nullptr},
                       input_names, input_tensors.data(), input_tensors.size(),
-                      output_names, output_tensors.data(), output_tensors.size());
+                      output_names, 1);
         __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "End inference");
+
+        auto& output_tensor = output_tensors[0];
+        auto type_info = output_tensor.GetTensorTypeAndShapeInfo();
+        int64_t* f = output_tensor.GetTensorMutableData<int64_t>();
+        size_t total_len = type_info.GetElementCount();
+        outputs.resize(total_len);
+        std::copy(f, f + total_len, outputs.begin());
+        DumpVec(outputs, "outputs");
     }
 };
 
@@ -156,7 +191,7 @@ Java_com_github_brokenegg_transformer_Translator_loadOnnxModel(JNIEnv *env, jobj
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_github_brokenegg_transformer_Translator_translate(JNIEnv *env, jobject thiz,
-                                                           jstring text, jlong initialToken) {
+                                                           jstring text, jlong initialToken, jint modelVersion) {
     if (g_translator == nullptr) return NULL;
     const char *ptext = env->GetStringUTFChars(text, NULL);
     jint len = env->GetStringUTFLength(text);
@@ -164,7 +199,7 @@ Java_com_github_brokenegg_transformer_Translator_translate(JNIEnv *env, jobject 
     env->ReleaseStringUTFChars(text, ptext);
 
     std::string output_text;
-    g_translator->Translate(input_text, initialToken, &output_text);
+    g_translator->Translate(input_text, initialToken, modelVersion, &output_text);
     jstring result = env->NewStringUTF(output_text.c_str());
 
     return result;

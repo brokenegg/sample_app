@@ -17,7 +17,8 @@ class Translator {
 
     private static final String LOG_TAG = "translator";
 
-    private static final String ONNX_MODEL_PATH = "brokenegg-20200711_torch.onnx";
+    private static final String ONNX_MODEL_PATH = "brokenegg-20200719.onnx";
+    public static final int ONNX_MODEL_VERSION = 2;
     private static final String SPM_MODEL_PATH = "brokenegg.en-es-ja.spm64k.model";
 
     private static final long EOS_ID = 2;
@@ -55,7 +56,7 @@ class Translator {
 
     private native boolean loadOnnxModel(String modelPath);
     private native boolean loadSentencePiece(byte[] buf, int len);
-    private native String translate(String text, long initialToken);
+    private native String translate(String text, long initialToken, int modelVersion);
 
     private long[] padData(long[] ids, int size) {
         if (ids.length == size) {
@@ -70,6 +71,6 @@ class Translator {
     }
 
     public String run(String text, long langId, int maxLength) {
-        return translate(text, langId);
+        return translate(text, langId, ONNX_MODEL_VERSION);
     }
 }
